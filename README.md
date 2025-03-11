@@ -1,2 +1,2 @@
 # .rtr
-The rotur web rendering language
+The rotur web scripting language
