@@ -19,6 +19,7 @@ class RTR {
       "/": (a, b) => a / b,
       "%": (a, b) => ((a % b) + b) % b,
       "^": (a, b) => a ** b,
+      "?": (a, b, c) => a ? b : c,
     };
 
     this.vars = [{
