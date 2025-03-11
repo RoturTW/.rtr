@@ -23,7 +23,7 @@ class rtrExp {
     };
 
     this.functions = {
-      not: (x) => !x,
+      log: (...args) => console.log(...args),
       min: (...args) => Math.min(...args),
       max: (...args) => Math.max(...args),
       abs: (x) => Math.abs(x),
@@ -34,6 +34,31 @@ class rtrExp {
       sin: (x) => Math.sin(x),
       cos: (x) => Math.cos(x),
       tan: (x) => Math.tan(x),
+      asin: (x) => Math.asin(x),
+      acos: (x) => Math.acos(x),
+      atan: (x) => Math.atan(x),
+      join: (...arr) => arr.join(""),
+      split: (str, sep) => str.split(sep),
+      keys: (obj) => Object.keys(obj),
+      values: (obj) => Object.values(obj),
+      length: (obj) => obj.length,
+      item: (obj, index) => obj[index],
+      typeof: (x) => typeof x,
+      range: (start, end) => Array.from({ length: end - start + 1 }, (_, i) => start + i),
+      input: (msg) => prompt(msg),
+      chr: (x) => String.fromCharCode(x),
+      ord: (x) => x.charCodeAt(0),
+      not: (x) => !x,
+      "!": (x) => !x,
+      set: (obj, key, val) => (obj[key] = val, obj),
+      obj: () => ({}),
+      del: (obj, key) => (delete obj[key], obj),
+      has: (obj, key) => obj.hasOwnProperty(key),
+      all: (...args) => args.every(Boolean),
+      any: (...args) => args.some(Boolean),
+      return: (val) => { this.setVar(" return_val", val, "="); this.setVar(" returned", true, "="); },
+      toNum: (x) => x | 0,
+      toStr: (x) => "" + x,
     };
   }
 
