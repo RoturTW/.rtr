@@ -460,6 +460,8 @@ class RTR {
   }
 }
 
+/** EXAMPLE RTR HANDLING
+
 let start = performance.now();
 
 const main = new RTR({ name: "originOS", version: "v5.5.5" }, `
@@ -481,3 +483,4 @@ event (onload) {
 // console.log(JSON.stringify(main.ast, null, 2));
 
 console.log("Execution time:", performance.now() - start, "ms");
+*/
