@@ -1,0 +1,7 @@
+{
+    "scripts": {
+        "build": "npm run build:main && npm run build:min",
+        "build:main": "tsup -d ./ ./src/main.ts && mv ./main.js ./rtr.js",
+        "build:min": "tsup ./src/main.ts -d ./ --minify-whitespace --minify-syntax --minify-identifiers --keep-names && mv ./main.js ./rtr-min.js"
+    }
+}
