@@ -18,16 +18,21 @@ class RTR {
       "*": (a, b) => a * b,
       "/": (a, b) => a / b,
       "%": (a, b) => ((a % b) + b) % b,
-      "^": (a, b) => a ** b,
-      "?": (a, b, c) => a ? b : c,
+      "^": (a, b) => a ** b
     };
+    this.opsList = Object.keys(this.operators).sort((a, b) => b.length - a.length);
 
     this.vars = [{
       platform: Object.assign({ name: "unknown", version: "unknown" }, platform),
       rtr: { version: "1.6", environment: { type: "javascript", } },
       mouse: { x: 0, y: 0, down: false, clicked: false, moved: false },
       keysdown: [],
-      log: (...args) => console.log(...args),
+      log: (...args) => console.log(...args.map(a => {
+        if (a === null) return "null";
+        if (Array.isArray(a)) return JSON.stringify(a);
+        if (typeof a === "object") return JSON.stringify(a);
+        return a;
+      })),
       min: (...args) => Math.min(...args),
       max: (...args) => Math.max(...args),
       abs: (x) => Math.abs(x),
@@ -48,6 +53,7 @@ class RTR {
       length: (obj) => obj.length,
       item: (obj, index) => obj[index],
       typeof: (x) => typeof x,
+      type: (x) => typeof x,
       range: (start, end) => Array.from({ length: end - start + 1 }, (_, i) => start + i),
       input: (msg) => prompt(msg),
       chr: (x) => String.fromCharCode(x),
@@ -91,9 +97,10 @@ class RTR {
     return out;
   }
 
-  parseData(line) {
-
+  parseData(line, depth = 0) {
+    if (depth > 50) return { type: "none", data: line };
     while (line.startsWith("(") && line.endsWith(")")) line = line.slice(1, -1);
+    if (!line) return { type: "none", data: "" };
     if (line.startsWith("\"") && line.endsWith("\"") && this.splitByDelimiters(line, "\"").length === 1) return { type: "string", data: line.slice(1, -1) };
 
     if ((line.startsWith("[") && line.endsWith("]")) || (line.startsWith("{") && line.endsWith("}"))) {
@@ -105,31 +112,33 @@ class RTR {
     } else if (line.endsWith(")") && line.indexOf("(") > 0) {
       let open = line.indexOf("(");
       let func = line.substring(0, open);
-      if (func.match(/^\w+$/) !== null) {
+      if (func.match(/^[a-zA-Z_!?][a-zA-Z0-9_!?]*$/) !== null || func === '?') {
         let val = this.splitByDelimiters(line, ".");
-        if (val.length > 1) return { type: "property", data: val.map((x, i) => i === 0 ? this.parseData(x) : x) };
+        if (val.length > 1) return { type: "property", data: val.map((x, i) => i === 0 ? this.parseData(x, depth + 1) : x) };
         return {
-          cmd: this.parseData(func), type: "func",
+          cmd: this.parseData(func, depth + 1), type: "func",
           data: this.splitByDelimiters(line.substring(open + 1, line.length - 1), ",")
-            .map(arg => this.parseData(arg))
+            .map(arg => this.parseData(arg, depth + 1))
         };
       } else {
         let val = this.splitByDelimiters(func, ".");
-        if (val.length > 1) return { type: "func", cmd: this.parseData(func), data: this.splitByDelimiters(line.substring(open + 1, line.length - 1), ",").map(arg => this.parseData(arg)) };
+        if (val.length > 1) return { type: "func", cmd: this.parseData(func, depth + 1), data: this.splitByDelimiters(line.substring(open + 1, line.length - 1), ",").map(arg => this.parseData(arg, depth + 1)) };
       }
     }
     if (line.indexOf(" ") === -1) {
       if (line === "true" || line === "false") return { type: "boolean", data: line === "true" };
       else if (line === "null") return { type: "null", data: null };
+      else if (line === "?") return { type: "none", data: "?" };
       else if (this.RE_NUMBER.test(line)) return { type: "number", data: parseFloat(line) };
-      else if (/^[^.,()\-+\/*%|&><=!~\s]+$/.test(line)) return { type: "none", data: line };
+      else if (/^[=!><+\-*/%^?]+$/.test(line)) { /* All operators - fall through */ }
+      else if (/^[^.,()\-+\/*%|&><=~\s^]+$/.test(line)) return { type: "none", data: line };
       else {
         let val = this.splitByDelimiters(line, ".");
-        if (val.length > 1) return { type: "property", data: val.map((x, i) => i === 0 ? this.parseData(x) : x) };
+        if (val.length > 1) return { type: "property", data: val.map((x, i) => i === 0 ? this.parseData(x, depth + 1) : x) };
       }
     }
     let out = [], buf = "", quotes = false;
-    let ops = Object.keys(this.operators);
+    let ops = this.opsList;
     ops.sort((a, b) => b.length - a.length);
     for (let i = 0; i < line.length; i++) {
       if (line[i] === '"') {
@@ -145,7 +154,7 @@ class RTR {
       for (const op of ops) {
         if (line.slice(i, i + op.length) === op) {
           if (buf.trim() !== "") {
-            out.push(this.parseData(buf.trim()));
+            out.push(this.parseData(buf.trim(), depth + 1));
             buf = "";
           }
           out.push(op);
@@ -157,7 +166,7 @@ class RTR {
       if (matched) continue;
       buf += line[i];
     }
-    if (buf.trim() !== "") out.push(this.parseData(buf.trim()));
+    if (buf.trim() !== "") out.push(this.parseData(buf.trim(), depth + 1));
     for (let i = 0; i < out.length; i++) {
       if (typeof out[i] === "string" && ops.includes(out[i])) {
         let left = out[i - 1], right = out[i + 1];
@@ -169,7 +178,8 @@ class RTR {
     return out.length === 1 ? out[0] : out;
   }
 
-  parseBlock(lines, i) {
+  parseBlock(lines, i, depth = 0) {
+    if (depth > 50) return [[], i + 1];
     let block = [];
     i++;
     for (; i < lines.length; i++) {
@@ -219,12 +229,12 @@ class RTR {
         i = newIndex - 1;
         continue;
       }
-      const assignmentMatch = line.match(/^(.*?)\s*(\+=|-=|\*=|\/=|\^=|%=|(?<!=)=(?!=))\s*(.*)$/);
-      if (assignmentMatch) {
+      const assignmentMatch = line.match(/^(.*?)\s*(\+=|-=|\*=|\/=|\^=|%=|=)\s*(.*)$/);
+      if (assignmentMatch && !/^(.*?)(\s*)(>=|<=|!=|==|>|<)(.*)$/.test(line)) {
         const [, variable, operator, expr] = assignmentMatch;
-        line = { cmd: operator, type: "func", variable: variable.trim(), data: this.parseData(expr) };
+        line = { cmd: operator, type: "func", variable: variable.trim(), data: this.parseData(expr, depth + 1) };
       } else {
-        line = this.parseData(line);
+        line = this.parseData(line, depth + 1);
       }
       block.push(line);
     }
@@ -401,7 +411,15 @@ class RTR {
         if (typeof node.variable !== "undefined" && cmd.endsWith("=")) return this.setVar(node.variable, this.evaluateNode(data[0]), cmd);
         switch (cmd) {
           case "obj": return {};
-          case "while": while (this.evaluateNode(data[0])) this.call(node.content); return;
+          case "while": {
+            let count = 0;
+            while (this.evaluateNode(data[0])) {
+              this.call(node.content);
+              count++;
+              if (count > 1000) throw new Error("Infinite while loop detected");
+            }
+            return;
+          }
           case "repeat": for (let i = this.evaluateNode(data[0]); i > 0.5; i--) this.call(node.content); return;
           case "scope": this.vars.push({}); this.call(node.content); this.vars.pop(); return;
           case "for": {
@@ -417,7 +435,12 @@ class RTR {
           case "if": {
             const condition = this.evaluateNode(data[0]);
             if (condition) this.call(node.content);
-            else if (node.elif) this.evaluateNode(node.elif);
+            else if (node.elif) {
+              const elifCondition = this.evaluateNode(node.elif.data[0]);
+              if (elifCondition) this.call(node.elif.content);
+              else if (node.elif.else) this.call(node.elif.else.content);
+              else if (node.else) this.call(node.else.content);
+            }
             else if (node.else) this.call(node.else.content);
             return;
           }
@@ -425,11 +448,20 @@ class RTR {
             try {
               if (typeof cmd === "function") return cmd(...data.map(x => this.evaluateNode(x)));
 
+              if ((cmd.type === "none" && this.operators[cmd.data]) || (cmd.type === "operation" && cmd.op === "?")) {
+                const opFn = this.operators[cmd.type === "operation" ? cmd.op : cmd.data];
+                return opFn(...data.map(x => this.evaluateNode(x)));
+              }
+
               let func;
               if (cmd.type === "define") {
                 func = cmd;
               } else {
-                func = this.getVar(cmd);
+                func = this.getVar(cmd.data);
+              }
+
+              if (typeof func === "function") {
+                return func(...data.map(x => this.evaluateNode(x)));
               }
 
               if (data?.type) data = [data];
@@ -460,27 +492,23 @@ class RTR {
   }
 }
 
-/** EXAMPLE RTR HANDLING
-
 let start = performance.now();
 
-const main = new RTR({ name: "originOS", version: "v5.5.5" }, `
+const main = new RTR({ name: "originOS", version: "v619" }, `
 
 event (onload) {
-  ob = obj()
+  obj = {}
 
-  log(ob)
-
-  ob.fn = (val)~{
-    log(val)
-    return(5 + 10)
+  obj.fn = (val)~{
+    return(val + 10)
   }
 
-  log(ob.fn(toNum(10)))
+  log(obj.fn(10))
 }
 `);
 
 // console.log(JSON.stringify(main.ast, null, 2));
 
 console.log("Execution time:", performance.now() - start, "ms");
-*/
+
+module.exports = RTR;
