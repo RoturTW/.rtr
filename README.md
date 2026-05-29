@@ -1,2 +1,1 @@
-# .rtr
-The rotur web scripting language
+Deprecated in favour of https://git.rotur.dev/rotur/rtr
